@@ -151,7 +151,6 @@ int main(int argc, char *argv[])
     }
 
 
-
     // Clear screen
     SDL_SetRenderDrawColor(rend, 0, 0, 0, 255);
     SDL_RenderClear(rend);
