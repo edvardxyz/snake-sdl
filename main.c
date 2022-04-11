@@ -5,7 +5,7 @@
 
 #define WIDTH 600
 #define HEIGHT 600
-#define SIZE 10
+#define SIZE 20
 
 enum direction
 {
@@ -15,24 +15,23 @@ enum direction
   RIGHT
 } direction;
 
-struct Node
+typedef struct Node
 {
   SDL_Rect rect;
   struct Node *next;
-};
+} Node;
 
-struct Apple
+typedef struct Apple
 {
   SDL_Rect rect;
-  int score;
-  struct Node *next;
-};
+  struct Apple *next;
+} Apple;
 
-struct Node* MoveSnake(struct Node*, SDL_Rect, bool);
+Node* MoveSnake(Node*, SDL_Rect, bool);
 
 int main(int argc, char *argv[])
 {
-  if (SDL_Init(SDL_INIT_EVERYTHING) != 0)
+  if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0)
   {
     printf("Error initializing SDL: %s\n", SDL_GetError());
     return 0;
@@ -49,7 +48,7 @@ int main(int argc, char *argv[])
     return 0;
   }
   // Create a renderer
-  SDL_Renderer *rend = SDL_CreateRenderer(wind, -1, 0);
+  SDL_Renderer *rend = SDL_CreateRenderer(wind, -1, SDL_RENDERER_ACCELERATED);
   if (!rend)
   {
     printf("Error creating renderer: %s\n", SDL_GetError());
@@ -58,18 +57,26 @@ int main(int argc, char *argv[])
     return 0;
   }
 
-  // Init game vars and snake body
-  int size = 0;
+
+  // Init game vars
   int score = 0; 
   int dir = RIGHT;
-  int FPS = 3;
+  int FPS = 10;
+  int highscore = 0;
+
+  // Get highscore
+  FILE *fptr = fopen("highscore.dat", "r");
+  if(fptr != NULL) {
+    fscanf(fptr, "%d", &highscore);
+  }
+  fclose(fptr);
 
   // create snake with 3 segments
   SDL_Rect head = {WIDTH / 2, HEIGHT / 2, SIZE, SIZE};
-  struct Node butt;
-  struct Node body;
+  Node butt;
+  Node body;
   // Node pointer to keep track of butt of snake
-  struct Node *p_butt = &butt;
+  Node *p_butt = &butt;
 
   butt.rect.h = SIZE;
   butt.rect.w = SIZE;
@@ -88,9 +95,8 @@ int main(int argc, char *argv[])
   struct Apple apple;
   apple.rect.h = SIZE;
   apple.rect.w = SIZE;
-  apple.rect.x = rand() % 60 * SIZE;
-  apple.rect.y = rand() % 60 * SIZE;
-  apple.score = 5;
+  apple.rect.x = rand() % 30 * SIZE;
+  apple.rect.y = rand() % 30 * SIZE;
   apple.next = NULL;
 
   bool eaten = false;
@@ -156,34 +162,28 @@ int main(int argc, char *argv[])
     if (apple.rect.y == head.y && apple.rect.x == head.x)
     {
       eaten = true;
-      score += apple.score;
+      score += 5;
       // TODO not inside snake
-      apple.rect.x = rand() % 60 * SIZE;
-      apple.rect.y = rand() % 60 * SIZE;
-      apple.score = rand() % 20;
-      if(apple.score > 10){
-        FPS += 5;
-      }else{
-        FPS += 1;
-      }
+      apple.rect.x = rand() % 30 * SIZE;
+      apple.rect.y = rand() % 30 * SIZE;
     }
 
     // check collision with self
-    struct Node *p = p_butt;
+    Node *p = p_butt;
     while(p != NULL){
 
       if(p->rect.x == head.x && p->rect.y == head.y){
         // TODO save score if highest
         // restart game 
-        exit(1);
+        running = false;
       }
       p = p->next;
     }
 
 
-    // check collision with edge 
+    // Check collision with edge 
     if(head.x >= WIDTH || head.x < 0 || head.y >= HEIGHT || head.y < 0){
-      exit(1);
+        running = false;
     }
 
 
@@ -212,16 +212,14 @@ int main(int argc, char *argv[])
     }
 
 
-    // print score in window title
+    // Print game info in window title
     char score_str[256];
-    sprintf(score_str, "Snake | Score: %d | Highscore: TODO | FPS: %d", score, FPS);
+    sprintf(score_str, "Snake | Score: %d | Highscore: %d", score, highscore);
     SDL_SetWindowTitle(wind, score_str);
-
 
     // Clear screen
     SDL_SetRenderDrawColor(rend, 0, 0, 0, 255);
     SDL_RenderClear(rend);
-
 
     // Draw the apple
     SDL_SetRenderDrawColor(rend, 255, 0, 0, 255);
@@ -233,7 +231,7 @@ int main(int argc, char *argv[])
     SDL_RenderFillRect(rend, &head);
 
     // Draw body segments of snake
-    struct Node *segment = p_butt;
+    Node *segment = p_butt;
     while(segment != NULL){
       SDL_RenderFillRect(rend, &segment->rect);
       segment = segment->next;
@@ -243,6 +241,16 @@ int main(int argc, char *argv[])
     SDL_RenderPresent(rend);
     SDL_Delay(1000 / FPS);
   }
+
+  // Save score if bigger than highscore
+  if(score > highscore){
+  FILE *fptr = fopen("highscore.dat", "w");
+    if(fptr != NULL){
+      fprintf(fptr, "%d", score);
+    }
+    fclose(fptr);
+  }
+
   // Release resources
   SDL_DestroyRenderer(rend);
   SDL_DestroyWindow(wind);
@@ -252,10 +260,10 @@ int main(int argc, char *argv[])
 
 // Moves snake by moving butt node to front of node list
 // Then returns pointer to new butt of snake
-struct Node *MoveSnake(struct Node *butt, SDL_Rect head, bool eaten)
+Node *MoveSnake(Node *butt, SDL_Rect head, bool eaten)
 {
 
-  struct Node *p = butt;
+  Node *p = butt;
 
   // make nodehead point to back as to back Node is going to become new nodehead
   do
@@ -265,10 +273,10 @@ struct Node *MoveSnake(struct Node *butt, SDL_Rect head, bool eaten)
       if (eaten)
       {
         // create new node with same pos as head
-        struct Node *new_segment = (struct Node *)malloc(sizeof(struct Node));
+        Node *new_segment = (Node *)malloc(sizeof(Node));
         if(new_segment == NULL){
           printf("Failed to allocate new node\n");
-          exit(-1);
+          exit(1);
         }
         new_segment->next = NULL;
         new_segment->rect = head;
