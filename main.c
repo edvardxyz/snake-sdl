@@ -205,7 +205,7 @@ struct Node* MoveSnake(struct Node* butt, SDL_Rect head){
   butt->rect = head;
   butt->next = NULL;
 
-  // return pointer to next segment after butt
+  // Return pointer to next segment after butt
   // to set p_butt
   return p;
 }
