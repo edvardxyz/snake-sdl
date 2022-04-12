@@ -206,26 +206,39 @@ int main(int argc, char *argv[])
       }
     }
 
+    Node *p = p_butt;
     // check if collision with apple
     if (apple.rect.y == head.y && apple.rect.x == head.x)
     {
       Mix_PlayChannel(-1, _sample[0], 0);
       eaten = true;
       score += 5;
-      // TODO not inside snake
-      apple.rect.x = rand() % divX * SIZE;
-      apple.rect.y = rand() % divY * SIZE;
+      // TODO optimize
+      // apple.rect.x = rand() % divX * SIZE;
+      // apple.rect.y = rand() % divY * SIZE;
+      // find apple pos not inside snake
+      bool foundApple = false;
+      while(!foundApple){
+       int x = rand() % divX * SIZE;
+       int y = rand() % divY * SIZE;
+        while (p != NULL)
+        {
+          if (p->rect.x != x && p->rect.y != y)
+          {
+
+          }
+          p = p->next;
+        }
+      }
     }
 
     // check collision with self
-    Node *p = p_butt;
+    p = p_butt;
     while (p != NULL)
     {
 
       if (p->rect.x == head.x && p->rect.y == head.y)
       {
-        // TODO save score if highest
-        // restart game
         dead = true;
       }
       p = p->next;
