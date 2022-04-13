@@ -218,8 +218,9 @@ int main(int argc, char *argv[])
       // }
     }
 
-    /* Check collision with snake */
-    p = p_head; 
+    /* Check collision with snake
+     start loop 3 segments behind as snake cant turn and hit those segments */
+    p = p_head->prev->prev->prev; 
     while (p != NULL)
     {
       if (p->rect.x == p_head->rect.x && p->rect.y == p_head->rect.y)
@@ -310,7 +311,7 @@ Node *MoveSnake(Node *p_head, bool eaten, int dir)
     if (p->prev->prev == NULL)
     {
       SDL_Rect butt_rect = p->prev->rect;
-
+      // todo?
       switch (dir)
       {
       case UP:
@@ -329,19 +330,19 @@ Node *MoveSnake(Node *p_head, bool eaten, int dir)
         break;
       }
 
-      if (eaten)
-      {
-        Node *new_segment = (Node *)malloc(sizeof(Node));
-        if (new_segment == NULL)
-        {
-          fprintf(stderr, "Failed to allocate new node\n");
-          exit(1);
-        }
-        new_segment->prev = NULL;
-        new_segment->rect = butt_rect;
-        p->prev->prev = new_segment;
-        return new_segment;
-      }
+      // if (eaten)
+      // {
+      //   Node *new_segment = (Node *)malloc(sizeof(Node));
+      //   if (new_segment == NULL)
+      //   {
+      //     fprintf(stderr, "Failed to allocate new node\n");
+      //     exit(1);
+      //   }
+      //   new_segment->prev = NULL;
+      //   new_segment->rect = butt_rect;
+      //   p->prev->prev = new_segment;
+      //   return new_segment;
+      // }
 
       Node * p_return_node = p->prev;
 
