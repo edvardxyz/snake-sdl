@@ -214,22 +214,22 @@ int main(int argc, char *argv[])
       eaten = true;
       score += 5;
       // TODO optimize
-      // apple.rect.x = rand() % divX * SIZE;
-      // apple.rect.y = rand() % divY * SIZE;
+      apple.rect.x = rand() % divX * SIZE;
+      apple.rect.y = rand() % divY * SIZE;
       // find apple pos not inside snake
-      bool foundApple = false;
-      while(!foundApple){
-       int x = rand() % divX * SIZE;
-       int y = rand() % divY * SIZE;
-        while (p != NULL)
-        {
-          if (p->rect.x != x && p->rect.y != y)
-          {
+      // bool foundApple = false;
+      // while(!foundApple){
+      //  int x = rand() % divX * SIZE;
+      //  int y = rand() % divY * SIZE;
+      //   while (p != NULL)
+      //   {
+      //     if (p->rect.x != x && p->rect.y != y)
+      //     {
 
-          }
-          p = p->next;
-        }
-      }
+      //     }
+      //     p = p->next;
+      //   }
+      // }
     }
 
     // check collision with self
