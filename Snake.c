@@ -4,12 +4,13 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_mixer.h>
 
-#define WIDTH 420
+#define WIDTH 440
 #define HEIGHT 300
 #define SIZE 20
 #define FPS 8
 #define divX WIDTH / SIZE
 #define divY HEIGHT / SIZE
+#define APPLE_SCORE 120
 #define NUM_WAVE 2
 const char* wave_file_names[] = 
 {
@@ -26,6 +27,13 @@ typedef struct Node
   SDL_Rect rect;
   struct Node *next;
 } Node;
+
+typedef struct Apple
+{
+  int score;
+  SDL_Rect rect;
+  struct Apple *next;
+} Apple;
 
 void MoveSnake(Node**, bool, int);
 
@@ -102,6 +110,8 @@ int main(int argc, char *argv[])
   bool eaten = false;
   bool dead = false;
   bool btn_pressed = false;
+  Uint8 apple_r = 255;
+  Uint8 apple_g = 0;
 
   /* Get highscore */
   FILE *fptr = fopen("highscore.dat", "r");
@@ -116,7 +126,7 @@ int main(int argc, char *argv[])
   /* Node pointer to keep track of head */
   Node *p_head = &head;
 
-  head.rect.x = (WIDTH / 2) + ((WIDTH / 2) % SIZE);
+  head.rect.x = SIZE;
   head.rect.y = (HEIGHT / 2) + ((HEIGHT / 2) % SIZE);
   head.rect.h = head.rect.w = SIZE;
   head.next = &body;
@@ -132,10 +142,11 @@ int main(int argc, char *argv[])
   tail.next = NULL;
 
   /* Create apple */
-  Node apple;
+  Apple apple;
   apple.rect.h = apple.rect.w = SIZE;
   apple.rect.x = rand() % divX * SIZE;
   apple.rect.y = rand() % divY * SIZE;
+  apple.score = APPLE_SCORE;
   apple.next = NULL;
 
 
@@ -198,23 +209,38 @@ int main(int argc, char *argv[])
     {
       Mix_PlayChannel(-1, sample[0], 0);
       eaten = true;
-      score += 5;
-      apple.rect.x = rand() % divX * SIZE;
-      apple.rect.y = rand() % divY * SIZE;
-      // find apple pos not inside snake
-      // bool foundApple = false;
-      // while(!foundApple){
-      //  int x = rand() % divX * SIZE;
-      //  int y = rand() % divY * SIZE;
-      //   while (p != NULL)
-      //   {
-      //     if (p->rect.x != x && p->rect.y != y)
-      //     {
-
-      //     }
-      //     p = p->next;
-      //   }
-      // }
+      score += apple.score;
+    /* Find new apple pos not inside snake */
+    notFound:
+      p = p_head;
+      int x = rand() % divX * SIZE;
+      int y = rand() % divY * SIZE;
+      while (p != NULL)
+      {
+        if (p->rect.x == x && p->rect.y == y)
+        {
+          goto notFound;
+        }
+        p = p->next;
+      }
+      apple.rect.y = y;
+      apple.rect.x = x;
+      apple.score = APPLE_SCORE;
+    }
+    /* Reduce score by 5 until eq 5 and blink the apple while higher score */
+    else if ( apple.score != 5)
+    {
+      apple.score -= 5;
+      if (apple_g == 255)
+      {
+        apple_g = 0;
+        apple_r = 255;
+      }
+      else
+      {
+        apple_g = 255;
+        apple_r = 0;
+      }
     }
 
     /* Check collision with snake
@@ -259,7 +285,7 @@ int main(int argc, char *argv[])
     SDL_RenderClear(rend);
 
     /* Draw the apple */
-    SDL_SetRenderDrawColor(rend, 255, 0, 0, 255);
+    SDL_SetRenderDrawColor(rend, apple_r, apple_g, 0, 255);
     SDL_RenderFillRect(rend, &apple.rect);
 
     /* Draw segments of snake */
@@ -287,7 +313,7 @@ int main(int argc, char *argv[])
     fclose(fptr);
   }
 
-  // Release resources
+  /* Release resources */
   for ( int i = 0; i < NUM_WAVE; i++){
     Mix_FreeChunk(sample[i]);
   }
