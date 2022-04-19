@@ -7,7 +7,7 @@
 #define WIDTH 420
 #define HEIGHT 300
 #define SIZE 20
-#define FPS 1
+#define FPS 8
 #define divX WIDTH / SIZE
 #define divY HEIGHT / SIZE
 #define NUM_WAVE 2
