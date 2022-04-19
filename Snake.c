@@ -4,26 +4,23 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_mixer.h>
 
-#define WIDTH 420
+#define WIDTH 440
 #define HEIGHT 300
 #define SIZE 20
-
+#define FPS 8
+#define divX WIDTH / SIZE
+#define divY HEIGHT / SIZE
+#define APPLE_SCORE 120
 #define NUM_WAVE 2
-const char* _waveFileNames[] = 
+const char* wave_file_names[] = 
 {
   "eat.wav",
   "die.wav"
 };
 
-Mix_Chunk* _sample[2];
+Mix_Chunk* sample[NUM_WAVE];
 
-enum direction
-{
-  UP,
-  DOWN,
-  LEFT,
-  RIGHT
-} direction;
+enum direction { UP = 1, DOWN, LEFT, RIGHT } direction;
 
 typedef struct Node
 {
@@ -33,17 +30,18 @@ typedef struct Node
 
 typedef struct Apple
 {
+  int score;
   SDL_Rect rect;
   struct Apple *next;
 } Apple;
 
-Node* MoveSnake(Node*, SDL_Rect, bool);
+void MoveSnake(Node**, bool, int);
 
 int Init(void)
 {
-  memset(_sample, 0, sizeof(Mix_Chunk *) * 2);
+  memset(sample, 0, sizeof(Mix_Chunk *) * NUM_WAVE);
 
-  // Set up the audio stream
+  /* Set up the audio stream */
   int result = Mix_OpenAudio(44100, AUDIO_S16SYS, 2, 512);
   if (result < 0)
   {
@@ -58,13 +56,14 @@ int Init(void)
     exit(1);
   }
 
-  // Load waveforms
+  /* Load waveforms */
   for (int i = 0; i < NUM_WAVE; i++)
   {
-    _sample[i] = Mix_LoadWAV(_waveFileNames[i]);
-    if (_sample[i] == NULL)
+    sample[i] = Mix_LoadWAV(wave_file_names[i]);
+    if (sample[i] == NULL)
     {
-      fprintf(stderr, "Unable to load wave file: %s Error: %s\n", _waveFileNames[i], Mix_GetError());
+      fprintf(stderr, "Unable to load wave file: %s Error: %s\n", 
+      wave_file_names[i], Mix_GetError());
     }
   }
   return true;
@@ -72,45 +71,49 @@ int Init(void)
 
 int main(int argc, char *argv[])
 {
+    fprintf(stderr, "Init audio failed\n");
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0)
   {
-    printf("Error initializing SDL: %s\n", SDL_GetError());
-    return 0;
+    fprintf(stderr, "Error initializing SDL: %s\n", SDL_GetError());
+    return 1;
   }
-  // Create a window
-  SDL_Window *wind = SDL_CreateWindow("Snake",
-                                      SDL_WINDOWPOS_CENTERED,
-                                      SDL_WINDOWPOS_CENTERED,
-                                      WIDTH, HEIGHT, 0);
+  /* Create a window */
+  SDL_Window *wind = SDL_CreateWindow("Snake", SDL_WINDOWPOS_CENTERED, 
+                                      SDL_WINDOWPOS_CENTERED, WIDTH, HEIGHT, 0);
   if (!wind)
   {
-    printf("Error creating window: %s\n", SDL_GetError());
+    fprintf(stderr, "Error creating window: %s\n", SDL_GetError());
     SDL_Quit();
-    return 0;
+    return 1;
   }
-  // Create a renderer
+  /* Create a renderer */
   SDL_Renderer *rend = SDL_CreateRenderer(wind, -1, SDL_RENDERER_ACCELERATED);
   if (!rend)
   {
-    printf("Error creating renderer: %s\n", SDL_GetError());
+    fprintf(stderr, "Error creating renderer: %s\n", SDL_GetError());
     SDL_DestroyWindow(wind);
     SDL_Quit();
-    return 0;
-  }
-  
-  if ( Init() == false){
     return 1;
   }
 
-  // Init game vars
-  int score = 0;
-  int dir = RIGHT;
-  int FPS = 8;
-  int highscore = 0;
-  int divX = WIDTH / SIZE;
-  int divY = HEIGHT / SIZE;
+  /* Init audio */
+  if ( Init() == false){
+    fprintf(stderr, "Init audio failed\n");
+    return 1;
+  }
 
-  // Get highscore
+  /* Init game vars */
+  int score, highscore = 0;
+  int dir = RIGHT;
+  SDL_Event event;
+  bool running = true;
+  bool eaten = false;
+  bool dead = false;
+  bool btn_pressed = false;
+  Uint8 apple_r = 255;
+  Uint8 apple_g = 0;
+
+  /* Get highscore */
   FILE *fptr = fopen("highscore.dat", "r");
   if (fptr != NULL)
   {
@@ -118,46 +121,40 @@ int main(int argc, char *argv[])
   }
   fclose(fptr);
 
-  // create snake with 3 segments
-  SDL_Rect head = {(WIDTH / 2) + ((WIDTH / 2) % SIZE), (HEIGHT / 2) + ((HEIGHT / 2) % SIZE), SIZE, SIZE};
-  Node butt;
-  Node body;
-  // Node pointer to keep track of butt of snake
-  Node *p_butt = &butt;
+  /* Create snake of 3 nodes */
+  Node head, body, tail;
+  /* Node pointer to keep track of head */
+  Node *p_head = &head;
 
-  butt.rect.h = SIZE;
-  butt.rect.w = SIZE;
-  butt.rect.y = head.y;
-  butt.rect.x = head.x + SIZE;
-  butt.next = &body;
+  head.rect.x = SIZE;
+  head.rect.y = (HEIGHT / 2) + ((HEIGHT / 2) % SIZE);
+  head.rect.h = head.rect.w = SIZE;
+  head.next = &body;
 
-  body.rect.h = SIZE;
-  body.rect.w = SIZE;
-  body.rect.y = head.y;
-  body.rect.x = butt.rect.x + SIZE;
-  body.next = NULL;
+  body.rect.x = head.rect.x - SIZE;
+  body.rect.y = head.rect.y;
+  body.rect.h = body.rect.w = SIZE;
+  body.next = &tail;
 
-  // Create apple
+  tail.rect.x = body.rect.x - SIZE;
+  tail.rect.y = head.rect.y;
+  tail.rect.h = tail.rect.w = SIZE;
+  tail.next = NULL;
 
-  struct Apple apple;
-  apple.rect.h = SIZE;
-  apple.rect.w = SIZE;
+  /* Create apple */
+  Apple apple;
+  apple.rect.h = apple.rect.w = SIZE;
   apple.rect.x = rand() % divX * SIZE;
   apple.rect.y = rand() % divY * SIZE;
+  apple.score = APPLE_SCORE;
   apple.next = NULL;
 
-  bool eaten = false;
-  bool dead = false;
 
-  // Main loop
-  SDL_Event event;
-  bool running = true;
-  bool pressed = false;
-
+  /* Main loop */
   while (running)
   {
-    pressed = false;
-    // Process events
+    btn_pressed = false;
+    /* Process events */
     while (SDL_PollEvent(&event))
     {
       switch (event.type)
@@ -167,7 +164,7 @@ int main(int argc, char *argv[])
         break;
       case SDL_KEYDOWN:
 
-        if (!pressed)
+        if (!btn_pressed)
         {
           switch (event.key.keysym.scancode)
           {
@@ -198,7 +195,7 @@ int main(int argc, char *argv[])
           default:
             break;
           }
-          pressed = true;
+          btn_pressed = true;
         }
         break;
       default:
@@ -206,115 +203,106 @@ int main(int argc, char *argv[])
       }
     }
 
-    Node *p = p_butt;
-    // check if collision with apple
-    if (apple.rect.y == head.y && apple.rect.x == head.x)
+    Node *p = p_head;
+    /* Check if collision with apple */
+    if (apple.rect.y == p_head->rect.y && apple.rect.x == p_head->rect.x)
     {
-      Mix_PlayChannel(-1, _sample[0], 0);
+      Mix_PlayChannel(-1, sample[0], 0);
       eaten = true;
-      score += 5;
-      // TODO optimize
-      apple.rect.x = rand() % divX * SIZE;
-      apple.rect.y = rand() % divY * SIZE;
-      // find apple pos not inside snake
-      // bool foundApple = false;
-      // while(!foundApple){
-      //  int x = rand() % divX * SIZE;
-      //  int y = rand() % divY * SIZE;
-      //   while (p != NULL)
-      //   {
-      //     if (p->rect.x != x && p->rect.y != y)
-      //     {
-
-      //     }
-      //     p = p->next;
-      //   }
-      // }
+      score += apple.score;
+    /* Find new apple pos not inside snake */
+    notFound:
+      p = p_head;
+      int x = rand() % divX * SIZE;
+      int y = rand() % divY * SIZE;
+      while (p != NULL)
+      {
+        if (p->rect.x == x && p->rect.y == y)
+        {
+          goto notFound;
+        }
+        p = p->next;
+      }
+      apple.rect.y = y;
+      apple.rect.x = x;
+      apple.score = APPLE_SCORE;
+    }
+    /* Reduce score by 5 until eq 5 and blink the apple while higher score */
+    else if ( apple.score != 5)
+    {
+      apple.score -= 5;
+      if (apple_g == 255)
+      {
+        apple_g = 0;
+        apple_r = 255;
+      }
+      else
+      {
+        apple_g = 255;
+        apple_r = 0;
+      }
     }
 
-    // check collision with self
-    p = p_butt;
+    /* Check collision with snake
+     start loop 3 segments behind as snake cant turn and hit those segments */
+    p = p_head->next->next->next; 
     while (p != NULL)
     {
-
-      if (p->rect.x == head.x && p->rect.y == head.y)
+      if (p->rect.x == p_head->rect.x && p->rect.y == p_head->rect.y)
       {
         dead = true;
+        break;
       }
       p = p->next;
     }
 
-    // Check collision with edge
-    if (head.x >= WIDTH || head.x < 0 || head.y < 0 || head.y >= HEIGHT)
+    /* Check collision with edge */
+    if (p_head->rect.x >= WIDTH || p_head->rect.x < 0 || 
+    p_head->rect.y < 0 || p_head->rect.y >= HEIGHT)
     {
       dead = true;
     }
 
     if (dead){
       running = false;
-      Mix_PlayChannel(-1, _sample[1], 0);
+      Mix_PlayChannel(-1, sample[1], 0);
       while(Mix_Playing(-1) !=0){
-        SDL_Delay(200);
+        SDL_Delay(300);
       }
       break;
     }
 
-    p_butt = MoveSnake(p_butt, head, eaten);
-
+    MoveSnake(&p_head, eaten, dir);
     eaten = false;
 
-    // Move snake in direction of dir
-    switch (dir)
-    {
-    case UP:
-      head.y -= SIZE;
-      break;
-    case DOWN:
-      head.y += SIZE;
-      break;
-    case LEFT:
-      head.x -= SIZE;
-      break;
-    case RIGHT:
-      head.x += SIZE;
-      break;
-
-    default:
-      break;
-    }
-
-    // Print game info in window title
+    /* Print game info in window title */
     char score_str[256];
     sprintf(score_str, "Snake | Score: %d | Highscore: %d", score, highscore);
     SDL_SetWindowTitle(wind, score_str);
 
-    // Clear screen
+    /* Clear screen */
     SDL_SetRenderDrawColor(rend, 0, 0, 0, 255);
     SDL_RenderClear(rend);
 
-    // Draw the apple
-    SDL_SetRenderDrawColor(rend, 255, 0, 0, 255);
+    /* Draw the apple */
+    SDL_SetRenderDrawColor(rend, apple_r, apple_g, 0, 255);
     SDL_RenderFillRect(rend, &apple.rect);
 
-    // NEEDS to be before body drawing
-    // Draw the head
+    /* Draw segments of snake */
+    p = p_head;
     SDL_SetRenderDrawColor(rend, 255, 255, 255, 255);
-    SDL_RenderFillRect(rend, &head);
-
-    // Draw body segments of snake
-    Node *segment = p_butt;
-    while (segment != NULL)
+    while (p != NULL)
     {
-      SDL_RenderFillRect(rend, &segment->rect);
-      segment = segment->next;
+      SDL_RenderFillRect(rend, &p->rect);
+      p = p->next;
     }
 
-    // Draw to window and loop
+    /* Draw to window and loop */
     SDL_RenderPresent(rend);
     SDL_Delay(1000 / FPS);
   }
 
-  // Save score if bigger than highscore
+  /* Save score if bigger than highscore */
   if (score > highscore)
   {
     FILE *fptr = fopen("highscore.dat", "w");
@@ -325,9 +313,9 @@ int main(int argc, char *argv[])
     fclose(fptr);
   }
 
-  // Release resources
+  /* Release resources */
   for ( int i = 0; i < NUM_WAVE; i++){
-    Mix_FreeChunk(_sample[i]);
+    Mix_FreeChunk(sample[i]);
   }
   Mix_CloseAudio();
   SDL_DestroyRenderer(rend);
@@ -336,47 +324,71 @@ int main(int argc, char *argv[])
   return 0;
 }
 
-// Moves snake by moving butt node to front of node list
-// Then returns pointer to new butt of snake
-Node *MoveSnake(Node *butt, SDL_Rect head, bool eaten)
+/*
+ * Makes tail move to front then changes head pointer to new head
+ * if eaten is true a new node will be added at the end
+ */
+void MoveSnake(Node **p_head, bool eaten, int dir)
 {
+  Node *prev = NULL, *cur = NULL;
+  prev = *p_head;
+  cur = prev->next;
 
-  Node *p = butt;
-
-  // make nodehead point to back as to back Node is going to become new nodehead
-  do
+  /* Go to last node and keep track of prev */
+  while (cur->next != NULL)
   {
-    if (p->next == NULL)
+    prev = prev->next;
+    cur = cur->next;
+  }
+
+  SDL_Rect tail_rect = cur->rect;
+
+
+  /* Change tails position to heads with a diff depending on direction */
+  switch (dir)
+  {
+  case UP:
+    cur->rect.y = (*p_head)->rect.y - SIZE;
+    cur->rect.x = (*p_head)->rect.x;
+    break;
+  case DOWN:
+    cur->rect.y = (*p_head)->rect.y + SIZE;
+    cur->rect.x = (*p_head)->rect.x;
+    break;
+  case LEFT:
+    cur->rect.x = (*p_head)->rect.x - SIZE;
+    cur->rect.y = (*p_head)->rect.y;
+    break;
+  case RIGHT:
+    cur->rect.x = (*p_head)->rect.x + SIZE;
+    cur->rect.y = (*p_head)->rect.y;
+    break;
+  default:
+    break;
+  }
+
+  /* If eaten create new node and make it the current */
+  if (eaten)
+  {
+    Node *new_segment = (Node *)malloc(sizeof(Node));
+    if (new_segment == NULL)
     {
-      if (eaten)
-      {
-        // create new node with same pos as head
-        Node *new_segment = (Node *)malloc(sizeof(Node));
-        if (new_segment == NULL)
-        {
-          printf("Failed to allocate new node\n");
-          exit(1);
-        }
-        new_segment->next = NULL;
-        new_segment->rect = head;
-        // make last body part point to new segment
-        p->next = new_segment;
-        return butt;
-      }
-
-      p->next = butt;
-      break;
+      fprintf(stderr, "Failed to allocate new node\n");
+      exit(1);
     }
+    new_segment->rect = tail_rect;
+    new_segment->next = NULL;
+    prev->next = new_segment;
+  }
+  else
+  {
+    /* Make 2nd last node point to NULL pointer as its the new tail */
+    prev->next = NULL;
+  }
 
-    p = p->next;
-  } while (p != NULL);
+  /* Make tail point to head */
+  cur->next = *p_head;
 
-  p = butt->next;
-
-  butt->rect = head;
-  butt->next = NULL;
-
-  // Return pointer to next segment after butt
-  // to set p_butt
-  return p;
+  /* Make pointer to head point to new head */
+  *p_head = cur;
 }
