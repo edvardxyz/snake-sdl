@@ -24,16 +24,16 @@ enum direction { UP = 1, DOWN, LEFT, RIGHT } direction;
 typedef struct Node
 {
   SDL_Rect rect;
-  struct Node *prev;
+  struct Node *next;
 } Node;
 
-Node* MoveSnake(Node*, bool, int);
+void MoveSnake(Node**, bool, int);
 
 int Init(void)
 {
   memset(sample, 0, sizeof(Mix_Chunk *) * NUM_WAVE);
 
-  // Set up the audio stream
+  /* Set up the audio stream */
   int result = Mix_OpenAudio(44100, AUDIO_S16SYS, 2, 512);
   if (result < 0)
   {
@@ -48,7 +48,7 @@ int Init(void)
     exit(1);
   }
 
-  // Load waveforms
+  /* Load waveforms */
   for (int i = 0; i < NUM_WAVE; i++)
   {
     sample[i] = Mix_LoadWAV(wave_file_names[i]);
@@ -69,7 +69,7 @@ int main(int argc, char *argv[])
     fprintf(stderr, "Error initializing SDL: %s\n", SDL_GetError());
     return 1;
   }
-  // Create a window
+  /* Create a window */
   SDL_Window *wind = SDL_CreateWindow("Snake", SDL_WINDOWPOS_CENTERED, 
                                       SDL_WINDOWPOS_CENTERED, WIDTH, HEIGHT, 0);
   if (!wind)
@@ -78,7 +78,7 @@ int main(int argc, char *argv[])
     SDL_Quit();
     return 1;
   }
-  // Create a renderer
+  /* Create a renderer */
   SDL_Renderer *rend = SDL_CreateRenderer(wind, -1, SDL_RENDERER_ACCELERATED);
   if (!rend)
   {
@@ -88,13 +88,13 @@ int main(int argc, char *argv[])
     return 1;
   }
 
-  // Init audio
+  /* Init audio */
   if ( Init() == false){
     fprintf(stderr, "Init audio failed\n");
     return 1;
   }
 
-  // Init game vars
+  /* Init game vars */
   int score, highscore = 0;
   int dir = RIGHT;
   SDL_Event event;
@@ -103,7 +103,7 @@ int main(int argc, char *argv[])
   bool dead = false;
   bool btn_pressed = false;
 
-  // Get highscore
+  /* Get highscore */
   FILE *fptr = fopen("highscore.dat", "r");
   if (fptr != NULL)
   {
@@ -111,39 +111,39 @@ int main(int argc, char *argv[])
   }
   fclose(fptr);
 
-  // Create snake of 3 nodes
-  Node head, body, butt;
-  // Node pointer to keep track of head 
+  /* Create snake of 3 nodes */
+  Node head, body, tail;
+  /* Node pointer to keep track of head */
   Node *p_head = &head;
 
   head.rect.x = (WIDTH / 2) + ((WIDTH / 2) % SIZE);
   head.rect.y = (HEIGHT / 2) + ((HEIGHT / 2) % SIZE);
   head.rect.h = head.rect.w = SIZE;
-  head.prev = &body;
+  head.next = &body;
 
   body.rect.x = head.rect.x - SIZE;
   body.rect.y = head.rect.y;
   body.rect.h = body.rect.w = SIZE;
-  body.prev = &butt;
+  body.next = &tail;
 
-  butt.rect.x = body.rect.x - SIZE;
-  butt.rect.y = head.rect.y;
-  butt.rect.h = butt.rect.w = SIZE;
-  butt.prev = NULL;
+  tail.rect.x = body.rect.x - SIZE;
+  tail.rect.y = head.rect.y;
+  tail.rect.h = tail.rect.w = SIZE;
+  tail.next = NULL;
 
-  // Create apple
+  /* Create apple */
   Node apple;
   apple.rect.h = apple.rect.w = SIZE;
   apple.rect.x = rand() % divX * SIZE;
   apple.rect.y = rand() % divY * SIZE;
-  apple.prev = NULL;
+  apple.next = NULL;
 
 
-  // Main loop
+  /* Main loop */
   while (running)
   {
     btn_pressed = false;
-    // Process events
+    /* Process events */
     while (SDL_PollEvent(&event))
     {
       switch (event.type)
@@ -193,13 +193,12 @@ int main(int argc, char *argv[])
     }
 
     Node *p = p_head;
-    // check if collision with apple
+    /* Check if collision with apple */
     if (apple.rect.y == p_head->rect.y && apple.rect.x == p_head->rect.x)
     {
       Mix_PlayChannel(-1, sample[0], 0);
       eaten = true;
       score += 5;
-      // TODO optimize
       apple.rect.x = rand() % divX * SIZE;
       apple.rect.y = rand() % divY * SIZE;
       // find apple pos not inside snake
@@ -220,7 +219,7 @@ int main(int argc, char *argv[])
 
     /* Check collision with snake
      start loop 3 segments behind as snake cant turn and hit those segments */
-    p = p_head->prev->prev->prev; 
+    p = p_head->next->next->next; 
     while (p != NULL)
     {
       if (p->rect.x == p_head->rect.x && p->rect.y == p_head->rect.y)
@@ -228,7 +227,7 @@ int main(int argc, char *argv[])
         dead = true;
         break;
       }
-      p = p->prev;
+      p = p->next;
     }
 
     /* Check collision with edge */
@@ -247,7 +246,7 @@ int main(int argc, char *argv[])
       break;
     }
 
-    p_head = MoveSnake(p_head, eaten, dir);
+    MoveSnake(&p_head, eaten, dir);
     eaten = false;
 
     /* Print game info in window title */
@@ -269,7 +268,7 @@ int main(int argc, char *argv[])
     while (p != NULL)
     {
       SDL_RenderFillRect(rend, &p->rect);
-      p = p->prev;
+      p = p->next;
     }
 
     /* Draw to window and loop */
@@ -300,56 +299,70 @@ int main(int argc, char *argv[])
 }
 
 /*
- *
- *
+ * Makes tail move to front then changes head pointer to new head
+ * if eaten is true a new node will be added at the end
  */
-Node *MoveSnake(Node *p_head, bool eaten, int dir)
+void MoveSnake(Node **p_head, bool eaten, int dir)
 {
-  Node *p = p_head;
-  while (p != NULL)
+  Node *prev = NULL, *cur = NULL;
+  prev = *p_head;
+  cur = prev->next;
+
+  /* Go to last node and keep track of prev */
+  while (cur->next != NULL)
   {
-    if (p->prev->prev == NULL)
+    prev = prev->next;
+    cur = cur->next;
+  }
+
+  SDL_Rect tail_rect = cur->rect;
+
+
+  /* Change tails position to heads with a diff depending on direction */
+  switch (dir)
+  {
+  case UP:
+    cur->rect.y = (*p_head)->rect.y - SIZE;
+    cur->rect.x = (*p_head)->rect.x;
+    break;
+  case DOWN:
+    cur->rect.y = (*p_head)->rect.y + SIZE;
+    cur->rect.x = (*p_head)->rect.x;
+    break;
+  case LEFT:
+    cur->rect.x = (*p_head)->rect.x - SIZE;
+    cur->rect.y = (*p_head)->rect.y;
+    break;
+  case RIGHT:
+    cur->rect.x = (*p_head)->rect.x + SIZE;
+    cur->rect.y = (*p_head)->rect.y;
+    break;
+  default:
+    break;
+  }
+
+  /* If eaten create new node and make it the current */
+  if (eaten)
+  {
+    Node *new_segment = (Node *)malloc(sizeof(Node));
+    if (new_segment == NULL)
     {
-      SDL_Rect butt_rect = p->prev->rect;
-      // todo?
-      switch (dir)
-      {
-      case UP:
-        p->prev->rect.y = p_head->rect.y - SIZE;
-        break;
-      case DOWN:
-        p->prev->rect.y = p_head->rect.y + SIZE;
-        break;
-      case LEFT:
-        p->prev->rect.x = p_head->rect.x - SIZE;
-        break;
-      case RIGHT:
-        p->prev->rect.x = p_head->rect.x + SIZE;
-        break;
-      default:
-        break;
-      }
-
-      // if (eaten)
-      // {
-      //   Node *new_segment = (Node *)malloc(sizeof(Node));
-      //   if (new_segment == NULL)
-      //   {
-      //     fprintf(stderr, "Failed to allocate new node\n");
-      //     exit(1);
-      //   }
-      //   new_segment->prev = NULL;
-      //   new_segment->rect = butt_rect;
-      //   p->prev->prev = new_segment;
-      //   return new_segment;
-      // }
-
-      Node * p_return_node = p->prev;
-
-      p->prev->prev = p_head;
-      p->prev = NULL;
-      return p_return_node;
+      fprintf(stderr, "Failed to allocate new node\n");
+      exit(1);
     }
-    p = p->prev;
-  } 
+    new_segment->rect = tail_rect;
+    new_segment->next = NULL;
+    prev->next = new_segment;
+  }
+  else
+  {
+    /* Make 2nd last node point to NULL pointer as its the new tail */
+    prev->next = NULL;
+  }
+
+  /* Make tail point to head */
+  cur->next = *p_head;
+
+  /* Make pointer to head point to new head */
+  *p_head = cur;
 }
